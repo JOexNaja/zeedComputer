@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mt-4">ตารางเปรียบเทียบ (เรียลไทม์)</h2>
+
+<label>วันที่:</label>
+<input type="date" id="report_date" class="form-control mb-3" value="{{ current_date }}">
+
+<div class="card mb-4">
+  <div class="card-header bg-primary text-white">กรอกข้อมูลรายวัน</div>
+  <div class="card-body">
+
+    <!-- เงินสด -->
+    <label>เงินสด:</label>
+    <input type="text" id="cash_income" class="form-control mb-2" placeholder="เช่น 200+300">
+
+    <!-- เงินโอน -->
+    <label>เงินโอน:</label>
+    <input type="text" id="transfer_income" class="form-control mb-2" placeholder="เช่น 200+300+500">
+
+    <!-- รายการอื่น ๆ -->
+    <h4 class="mt-3">รายการอื่น ๆ</h4>
+    <div id="other-list"></div>
+    <button type="button" id="btn-add-other" class="btn btn-outline-secondary mb-2">+ เพิ่มรายการอื่น</button>
+
+    <!-- รายจ่าย -->
+    <h4 class="mt-3">รายจ่าย</h4>
+    <div id="expense-list"></div>
+    <button type="button" id="btn-add-expense" class="btn btn-outline-secondary mb-2">+ เพิ่มรายจ่าย</button>
+
+    <!-- ตารางสรุป -->
+    <table class="table table-bordered mt-4">
+      <tr><th>เงินสด</th><td id="cash_total">0</td></tr>
+      <tr><th>เงินโอน</th><td id="transfer_total">0</td></tr>
+      <tr><th>รวมรายการอื่น ๆ</th><td id="other_total">0</td></tr>
+      <tr class="table-info"><th>รวมรายรับ</th><td id="income_total">0</td></tr>
+      <tr class="table-danger"><th>รวมรายจ่าย</th><td id="expense_total">0</td></tr>
+      <tr class="table-warning"><th>สุทธิ (รายรับ - รายจ่าย)</th><td id="net_total">0</td></tr>
+      <tr class="table-primary"><th>สรุปทั้งหมด</th><td id="transfer_minus_expense">0</td></tr>
+    </table>
+
+    <button type="button" class="btn btn-success mt-3" onclick="saveReport()">บันทึกข้อมูล</button>
+  </div>
+</div>
+
+<hr>
+
+<!-- ตารางย้อนหลัง -->
+<h2 class="mt-4">📊 สรุปรายวันย้อนหลัง</h2>
+<table class="table table-bordered">
+  <thead>
+    <tr><th>วันที่</th><th>รายรับ</th><th>รายจ่าย</th><th>สุทธิ</th></tr>
+  </thead>
+  <tbody>
+    {% for r in reports %}
+    <tr>
+      <td>{{ r['date'] }}</td>
+      <td>{{ r['income'] }}</td>
+      <td>{{ r['expense'] }}</td>
+      <td class="{% if r['net'] >= 0 %}table-success{% else %}table-danger{% endif %}">
+        {{ r['net'] }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- สรุปรายเดือน -->
+<h2 class="mt-4">📅 สรุปรายเดือน</h2>
+<table class="table table-bordered">
+  <thead>
+    <tr><th>เดือน</th><th>รายรับ</th><th>รายจ่าย</th><th>สุทธิ</th></tr>
+  </thead>
+  <tbody>
+    {% for m in monthly_reports %}
+    <tr>
+      <td>{{ m['month'] }}</td>
+      <td>{{ m['income'] }}</td>
+      <td>{{ m['expense'] }}</td>
+      <td class="{% if m['net'] >= 0 %}table-success{% else %}table-danger{% endif %}">
+        {{ m['net'] }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+<script>
+function parseSum(str) {
+  if (!str) return 0;
+  return str.split('+').map(s => parseFloat(s.trim()) || 0).reduce((a,b) => a+b, 0);
+}
+
+function calculate() {
+  let cash = parseSum(document.getElementById('cash_income').value);
+  let transfer = parseSum(document.getElementById('transfer_income').value);
+
+  let otherAmounts = document.querySelectorAll('.other-amount');
+  let otherTotal = 0;
+  otherAmounts.forEach(input => { otherTotal += parseFloat(input.value) || 0; });
+
+  let expenseAmounts = document.querySelectorAll('.expense-amount');
+  let expenseTotal = 0;
+  expenseAmounts.forEach(input => { expenseTotal += parseFloat(input.value) || 0; });
+
+  let incomeTotal = cash + transfer + otherTotal;
+  let net = incomeTotal - expenseTotal;
+  let transferMinusExpense = transfer - expenseTotal;
+
+  document.getElementById('cash_total').innerText = cash;
+  document.getElementById('transfer_total').innerText = transfer;
+  document.getElementById('other_total').innerText = otherTotal;
+  document.getElementById('income_total').innerText = incomeTotal;
+  document.getElementById('expense_total').innerText = expenseTotal;
+  document.getElementById('net_total').innerText = net;
+  document.getElementById('transfer_minus_expense').innerText = transferMinusExpense;
+}
+
+function addExpense() {
+  let div = document.createElement('div');
+  div.className = "input-group mb-2";
+  div.innerHTML = `
+    <input type="text" class="form-control expense-name" placeholder="ชื่อรายการ เช่น ค่า HDD">
+    <input type="number" class="form-control expense-amount" placeholder="จำนวนเงิน">
+  `;
+  document.getElementById('expense-list').appendChild(div);
+  div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
+}
+
+function addOther() {
+  let div = document.createElement('div');
+  div.className = "input-group mb-2";
+  div.innerHTML = `
+    <input type="text" class="form-control other-name" placeholder="ชื่อรายการ เช่น โบนัส">
+    <input type="number" class="form-control other-amount" placeholder="จำนวนเงิน">
+  `;
+  document.getElementById('other-list').appendChild(div);
+  div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
+}
+
+// bind ปุ่ม + ให้ทำงาน
+document.getElementById('btn-add-expense').addEventListener('click', addExpense);
+document.getElementById('btn-add-other').addEventListener('click', addOther);
+
+// bind input หลัก
+document.querySelectorAll('#cash_income, #transfer_income').forEach(el => {
+  el.addEventListener('input', calculate);
+});
+
+calculate();
+
+function saveReport() {
+  let reportDate = document.getElementById('report_date').value;
+  let cash = parseSum(document.getElementById('cash_income').value);
+  let transfer = parseSum(document.getElementById('transfer_income').value);
+
+  let otherAmounts = document.querySelectorAll('.other-amount');
+  let otherTotal = 0;
+  otherAmounts.forEach(input => { otherTotal += parseFloat(input.value) || 0; });
+
+  let expenseAmounts = document.querySelectorAll('.expense-amount');
+  let expenseTotal = 0;
+  expenseAmounts.forEach(input => { expenseTotal += parseFloat(input.value) || 0; });
+
+  let incomeTotal = cash + transfer + otherTotal;
+  let net = incomeTotal - expenseTotal;
+
+  fetch("/save_report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      date: reportDate,
+      cash: cash,
+      transfer: transfer,
+      other: otherTotal,
+      expense: expenseTotal,
+      income: incomeTotal,
+      net: net
+    })
+  }).then(res => res.json())
+    .then(data => alert(data.message));
+}
+</script>

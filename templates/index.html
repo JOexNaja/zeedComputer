@@ -8,38 +8,17 @@
   <div class="card-body">
     <form action="/add_income" method="POST">
       <input type="date" name="date" class="form-control mb-2" value="{{ current_date }}" required>
-      <select name="customer_id" class="form-control mb-2">
+      <select name="customer_id" class="form-control mb-2" required>
         <option value="">-- เลือกลูกค้า --</option>
         {% for c in customers %}
         <option value="{{ c.id }}">{{ c.name }}</option>
         {% endfor %}
       </select>
-      <input type="text" name="source" class="form-control mb-2" placeholder="แหล่งที่มา (เงินสด/เงินโอน/อื่นๆ)" required>
-      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="จำนวนเงิน" required>
+      <input type="text" name="activity" class="form-control mb-2" placeholder="กิจกรรม/ทำอะไร" required>
+      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="ราคา" required>
       <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
-      <button type="submit" class="btn btn-primary">เพิ่มรายรับ</button>
+      <button type="submit" class="btn btn-primary">บันทึกรายรับ</button>
     </form>
-  </div>
-</div>
-
-<!-- ตารางรายรับ -->
-<div class="card mb-4">
-  <div class="card-header bg-primary text-white">📈 รายรับทั้งหมด</div>
-  <div class="card-body">
-    <table class="table table-striped">
-      <thead><tr><th>วันที่</th><th>ลูกค้า</th><th>แหล่งที่มา</th><th>จำนวนเงิน</th><th>หมายเหตุ</th></tr></thead>
-      <tbody>
-        {% for income in incomes %}
-        <tr>
-          <td>{{ income.date }}</td>
-          <td>{{ income.customer_name }}</td>
-          <td>{{ income.source }}</td>
-          <td>{{ income.amount }}</td>
-          <td>{{ income.note }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
 </div>
 
@@ -49,119 +28,71 @@
   <div class="card-body">
     <form action="/add_expense" method="POST">
       <input type="date" name="date" class="form-control mb-2" value="{{ current_date }}" required>
-      <input type="text" name="item" class="form-control mb-2" placeholder="รายการ" required>
-      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="จำนวนเงิน" required>
+      <input type="text" name="item" class="form-control mb-2" placeholder="รายการ เช่น SSD 256" required>
+      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="ราคา" required>
       <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
-      <button type="submit" class="btn btn-danger">เพิ่มรายจ่าย</button>
+      <button type="submit" class="btn btn-danger">บันทึกรายจ่าย</button>
     </form>
   </div>
 </div>
 
+<!-- ตารางรายรับ -->
+<h2>📈 รายรับทั้งหมด</h2>
+<table class="table table-striped">
+  <thead><tr><th>วันที่</th><th>ลูกค้า</th><th>กิจกรรม</th><th>ราคา</th><th>หมายเหตุ</th><th>การจัดการ</th></tr></thead>
+  <tbody>
+    {% for income in incomes %}
+    <tr>
+      <td>{{ income.date }}</td>
+      <td>{{ income.customer_name }}</td>
+      <td>{{ income.activity }}</td>
+      <td>{{ income.amount }}</td>
+      <td>{{ income.note }}</td>
+      <td>
+        <a href="/edit_income/{{ income.id }}" class="btn btn-sm btn-warning">แก้ไข</a>
+        <a href="/delete_income/{{ income.id }}" class="btn btn-sm btn-danger"
+           onclick="return confirm('คุณแน่ใจว่าจะลบข้อมูลนี้?')">ลบ</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
 <!-- ตารางรายจ่าย -->
-<div class="card mb-4">
-  <div class="card-header bg-danger text-white">📉 รายจ่ายทั้งหมด</div>
-  <div class="card-body">
-    <table class="table table-striped">
-      <thead><tr><th>วันที่</th><th>รายการ</th><th>จำนวนเงิน</th><th>หมายเหตุ</th></tr></thead>
-      <tbody>
-        {% for expense in expenses %}
-        <tr>
-          <td>{{ expense.date }}</td>
-          <td>{{ expense.item }}</td>
-          <td>{{ expense.amount }}</td>
-          <td>{{ expense.note }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ตารางรวมรายรับตามช่องเงินเข้า -->
-<h2 class="mt-4">รวมรายรับตามช่องเงินเข้า ({{ current_date }})</h2>
-<table class="table table-bordered">
-  <tr><th>ช่องเงินเข้า</th><th>ยอดรวม</th></tr>
-  {% for row in income_by_source %}
-  <tr>
-    <td>{{ row.source }}</td>
-    <td>{{ row.total }}</td>
-  </tr>
-  {% endfor %}
-  <tr class="table-info">
-    <td><strong>รวมรายรับทั้งหมด</strong></td>
-    <td><strong>{{ today_income }}</strong></td>
-  </tr>
+<h2>📉 รายจ่ายทั้งหมด</h2>
+<table class="table table-striped">
+  <thead><tr><th>วันที่</th><th>รายการ</th><th>ราคา</th><th>หมายเหตุ</th><th>การจัดการ</th></tr></thead>
+  <tbody>
+    {% for expense in expenses %}
+    <tr>
+      <td>{{ expense.date }}</td>
+      <td>{{ expense.item }}</td>
+      <td>{{ expense.amount }}</td>
+      <td>{{ expense.note }}</td>
+      <td>
+        <a href="/edit_expense/{{ expense.id }}" class="btn btn-sm btn-warning">แก้ไข</a>
+        <a href="/delete_expense/{{ expense.id }}" class="btn btn-sm btn-danger"
+           onclick="return confirm('คุณแน่ใจว่าจะลบข้อมูลนี้?')">ลบ</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 
-<!-- ตารางรวมรายจ่าย -->
-<h2 class="mt-4">รวมรายจ่าย ({{ current_date }})</h2>
-<table class="table table-bordered">
-  <tr><th>รายการ</th><th>จำนวนเงิน</th></tr>
-  {% for expense in expenses if expense.date == current_date %}
-  <tr>
-    <td>{{ expense.item }}</td>
-    <td>{{ expense.amount }}</td>
-  </tr>
-  {% endfor %}
-  <tr class="table-danger">
-    <td><strong>รวมรายจ่ายทั้งหมด</strong></td>
-    <td><strong>{{ today_expense }}</strong></td>
-  </tr>
-</table>
-
-<!-- ตารางสรุปสุทธิรายวัน -->
-<h2 class="mt-4">สรุปสุทธิรายวัน</h2>
+<!-- สรุปรายวัน -->
+<h2 class="mt-4">สรุปรายวัน ({{ current_date }})</h2>
 <table class="table table-bordered">
   <tr><th>รวมรายรับ</th><td>{{ today_income }}</td></tr>
   <tr><th>รวมรายจ่าย</th><td>{{ today_expense }}</td></tr>
   <tr class="{% if today_net >= 0 %}table-success{% else %}table-danger{% endif %}">
-    <th>สุทธิ (รายรับ - รายจ่าย)</th>
-    <td>{{ today_net }}</td>
-  </tr>
-</table>
-
-{% if today_net >= 0 %}
-<div class="alert alert-success mt-3">✅ วันนี้ร้านมีกำไร</div>
-{% else %}
-<div class="alert alert-danger mt-3">⚠️ วันนี้ร้านขาดทุน</div>
-{% endif %}
-
-
-
-<!-- ตารางเปรียบเทียบเงินเข้าวันนี้ -->
-<h2 class="mt-4">ตารางเปรียบเทียบเงินเข้าวันนี้</h2>
-<table class="table table-bordered">
-  <tr><th>ประเภท</th><th>ยอดเงิน</th></tr>
-  <tr><td>เงินสด</td><td>{{ cash_income }}</td></tr>
-  <tr><td>เงินโอน</td><td>{{ transfer_income }}</td></tr>
-  <tr class="table-info"><td>รวมเงินเข้า</td><td>{{ total_inflow }}</td></tr>
-  <tr><td>รายจ่ายวันนี้</td><td>{{ today_expense }}</td></tr>
-  <tr class="{% if remaining_after_expense == today_net %}table-success{% else %}table-danger{% endif %}">
-    <td>หักแล้วเหลือ</td>
-    <td>{{ remaining_after_expense }}</td>
-  </tr>
-</table>
-
-{% if remaining_after_expense == today_net %}
-<div class="alert alert-success mt-3">✅ เงินเข้าหักรายจ่ายตรงกับยอดสุทธิร้าน</div>
-{% else %}
-<div class="alert alert-danger mt-3">⚠️ เงินเข้าหักรายจ่ายไม่ตรงกับยอดสุทธิร้าน</div>
-{% endif %}
-
-
-
-
-<!-- สรุปรายเดือน -->
-<h2 class="mt-4">สรุปรายเดือน ({{ current_date[:7] }})</h2>
-<table class="table table-bordered">
-  <tr><th>รายรับเดือนนี้</th><td>{{ monthly_income }}</td></tr>
-  <tr><th>รายจ่ายเดือนนี้</th><td>{{ monthly_expense }}</td></tr>
-  <tr class="{% if monthly_net >= 0 %}table-success{% else %}table-danger{% endif %}">
-    <th>สุทธิเดือนนี้</th>
-    <td>{{ monthly_net }}</td>
+    <th>สุทธิ</th><td>{{ today_net }}</td>
   </tr>
 </table>
 
 
 
+
+
+<!-- ตารางเปรียบเทียบเรียลไทม์ -->
+{% include "compare_realtime.html" %}
 {% endblock %}

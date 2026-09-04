@@ -2,23 +2,27 @@
 {% block content %}
 <h2>แก้ไขรายจ่าย</h2>
 <form method="POST">
-  <div class="mb-3">
-    <label class="form-label">วันที่</label>
-    <input type="date" name="date" class="form-control" value="{{ expense.date }}" required>
+  <div class="mb-2">
+    <label>วันที่:</label>
+    <input type="date" name="date" value="{{ expense.date }}" class="form-control">
   </div>
-  <div class="mb-3">
-    <label class="form-label">รายการ</label>
-    <input type="text" name="item" class="form-control" value="{{ expense.item }}" required>
+
+  <div class="mb-2">
+    <label>รายการ:</label>
+    <input type="text" name="item" value="{{ expense.item }}" class="form-control">
   </div>
-  <div class="mb-3">
-    <label class="form-label">จำนวนเงิน</label>
-    <input type="number" step="0.01" name="amount" class="form-control" value="{{ expense.amount }}" required>
+
+  <div class="mb-2">
+    <label>ราคา:</label>
+    <input type="number" step="0.01" name="amount" value="{{ expense.amount }}" class="form-control">
   </div>
-  <div class="mb-3">
-    <label class="form-label">หมายเหตุ</label>
-    <input type="text" name="note" class="form-control" value="{{ expense.note }}">
+
+  <div class="mb-2">
+    <label>หมายเหตุ:</label>
+    <input type="text" name="note" value="{{ expense.note }}" class="form-control">
   </div>
+
   <button type="submit" class="btn btn-success">บันทึกการแก้ไข</button>
-  <a href="/" class="btn btn-secondary">ยกเลิก</a>
+  <a href="{{ url_for('index') }}" class="btn btn-secondary">ยกเลิก</a>
 </form>
 {% endblock %}
