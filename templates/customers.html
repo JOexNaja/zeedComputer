@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>ฐานลูกค้า</h2>
+
+<form method="POST" action="/add_customer">
+  <input type="text" name="name" class="form-control mb-2" placeholder="ชื่อลูกค้า" required>
+  <input type="text" name="phone" class="form-control mb-2" placeholder="เบอร์โทร">
+  <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
+  <button type="submit" class="btn btn-primary">เพิ่มลูกค้า</button>
+</form>
+
+<table class="table mt-4">
+  <tr>
+    <th>ชื่อ</th><th>เบอร์โทร</th><th>หมายเหตุ</th><th>จัดการ</th>
+  </tr>
+  {% for customer in customers %}
+  <tr>
+    <td>{{ customer.name }}</td>
+    <td>{{ customer.phone }}</td>
+    <td>{{ customer.note }}</td>
+    <td>
+  <a href="/edit_customer/{{ customer.id }}" class="btn btn-sm btn-warning">แก้ไข</a>
+  <a href="/delete_customer/{{ customer.id }}" class="btn btn-sm btn-danger">ลบ</a>
+</td>
+
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

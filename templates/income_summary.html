@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>สรุปรายรับ–รายจ่าย</h1>
+
+<!-- ตารางสรุปรายวัน -->
+<h2>สรุปรายวัน ({{ today }})</h2>
+<table class="table table-bordered">
+  <tr><th>รายรับวันนี้</th><td>{{ today_income }}</td></tr>
+  <tr><th>รายจ่ายวันนี้</th><td>{{ today_expense }}</td></tr>
+  <tr class="table-success"><th>สุทธิวันนี้</th><td>{{ today_net }}</td></tr>
+</table>
+
+<!-- ตารางเปรียบเทียบ (อยู่ล่างสุดถัดจากสรุปรายวัน) -->
+<h2 class="mt-4">ตารางเปรียบเทียบเงินเข้าวันนี้กับยอดสุทธิร้าน</h2>
+<table class="table table-striped">
+  <tr>
+    <th>ประเภท</th>
+    <th>ยอดเงิน</th>
+  </tr>
+  <tr class="{% if today_income == today_net %}table-success{% else %}table-danger{% endif %}">
+    <td>เงินเข้าวันนี้</td>
+    <td>{{ today_income }}</td>
+  </tr>
+  <tr class="{% if today_income == today_net %}table-success{% else %}table-danger{% endif %}">
+    <td>ยอดสุทธิร้าน (รายรับ - รายจ่าย)</td>
+    <td>{{ today_net }}</td>
+  </tr>
+</table>
+
+{% if today_income == today_net %}
+<div class="alert alert-success mt-3">✅ เงินเข้าของวันนี้ตรงกับยอดสุทธิร้าน</div>
+{% else %}
+<div class="alert alert-danger mt-3">⚠️ เงินเข้าของวันนี้ไม่ตรงกับยอดสุทธิร้าน</div>
+{% endif %}
+
+<!-- ตารางสรุปรายเดือน -->
+<h2 class="mt-4">สรุปรายเดือน ({{ today[:7] }})</h2>
+<table class="table table-bordered">
+  <tr><th>รายรับเดือนนี้</th><td>{{ monthly_income }}</td></tr>
+  <tr><th>รายจ่ายเดือนนี้</th><td>{{ monthly_expense }}</td></tr>
+  <tr class="table-success"><th>สุทธิเดือนนี้</th><td>{{ monthly_net }}</td></tr>
+</table>
+{% endblock %}

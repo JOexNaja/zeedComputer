@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>สรุปรายได้ร้าน</h1>
+
+<table class="table table-bordered">
+  <tr><th>รายรับจริง</th><td>{{ total_income }}</td></tr>
+  <tr><th>ลูกหนี้ที่จ่ายแล้ว</th><td>{{ paid_debtors }}</td></tr>
+  <tr><th>รายจ่ายจริง</th><td>{{ total_expense }}</td></tr>
+  <tr><th>เครดิตที่จ่ายแล้ว</th><td>{{ paid_credits }}</td></tr>
+  <tr class="table-success"><th>กำไรสุทธิร้าน</th><td>{{ net_total }}</td></tr>
+</table>
+
+<h2 class="mt-4">หุ้นส่วน</h2>
+<form method="POST" action="/add_partner" class="mb-4">
+  <div class="row">
+    <div class="col"><input type="text" name="name" class="form-control" placeholder="ชื่อหุ้นส่วน" required></div>
+    <div class="col"><input type="number" step="0.01" name="share_percent" class="form-control" placeholder="สัดส่วน %" required></div>
+    <div class="col"><input type="text" name="note" class="form-control" placeholder="หมายเหตุ"></div>
+    <div class="col"><button type="submit" class="btn btn-primary">เพิ่มหุ้นส่วน</button></div>
+  </div>
+</form>
+
+<table class="table table-striped">
+  <tr>
+    <th>ชื่อหุ้นส่วน</th>
+    <th>สัดส่วน (%)</th>
+    <th>ส่วนแบ่ง</th>
+    <th>เบิกแล้ว</th>
+    <th>ยอดคงเหลือ</th>
+    <th>เบิกเงิน</th>
+  </tr>
+  {% for p in partner_balances %}
+  <tr>
+    <td>{{ p.name }}</td>
+    <td>{{ p.share_percent }}</td>
+    <td>{{ p.share_amount }}</td>
+    <td>{{ p.withdrawn }}</td>
+    <td>{{ p.balance }}</td>
+    <td>
+      <form method="POST" action="/withdraw_partner/{{ p.id }}" class="d-flex">
+        <input type="number" step="0.01" name="amount" class="form-control me-2" placeholder="จำนวน" required>
+        <input type="text" name="note" class="form-control me-2" placeholder="หมายเหตุ">
+        <button type="submit" class="btn btn-warning">เบิก</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

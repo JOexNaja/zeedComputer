@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>แก้ไขลูกค้า</h2>
+<form method="POST">
+  <div class="mb-3">
+    <label class="form-label">ชื่อลูกค้า</label>
+    <input type="text" name="name" class="form-control" value="{{ customer.name }}" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">เบอร์โทร</label>
+    <input type="text" name="phone" class="form-control" value="{{ customer.phone }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">หมายเหตุ</label>
+    <input type="text" name="note" class="form-control" value="{{ customer.note }}">
+  </div>
+  <button type="submit" class="btn btn-success">บันทึกการแก้ไข</button>
+  <a href="/customers" class="btn btn-secondary">ยกเลิก</a>
+</form>
+{% endblock %}
