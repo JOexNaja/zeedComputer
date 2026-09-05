@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
-from datetime import date
+from datetime import date, datetime
+
 
 app = Flask(__name__)
 
@@ -9,54 +10,54 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# ฟังก์ชันแปลงวันที่เป็นปี พ.ศ.
+def thai_date(value, fmt="%d-%m-%Y"):
+    if not value:
+        return ""
+    dt = datetime.strptime(value, "%Y-%m-%d")
+    thai_year = dt.year + 543
+    # ใช้ format ที่ส่งเข้ามา แต่แทนปีเป็น พ.ศ.
+    return dt.strftime(fmt).replace(str(dt.year), str(thai_year))
+
+# ลงทะเบียน filter ให้ Jinja ใช้งานได้
+app.jinja_env.filters['thai_date'] = thai_date
+
+
 @app.route('/')
 def index():
     today = date.today().strftime("%Y-%m-%d")
-    current_month = date.today().strftime("%Y-%m")
+    start_date = today
+    end_date = today
 
     with get_db_connection() as conn:
-        incomes = conn.execute("""
-            SELECT income.id, income.date, income.source, income.amount, income.note,
-                   customers.name as customer_name
-            FROM income
-            LEFT JOIN customers ON income.customer_id = customers.id
-            ORDER BY income.date DESC
-        """).fetchall()
+        incomes = conn.execute(
+            "SELECT i.id, i.date, c.name as customer_name, i.source, i.amount, i.note "
+            "FROM income i LEFT JOIN customers c ON i.customer_id=c.id "
+            "WHERE i.date BETWEEN ? AND ? ORDER BY i.date ASC",
+            (start_date, end_date)
+        ).fetchall()
 
-        expenses = conn.execute("SELECT * FROM expenses ORDER BY date DESC").fetchall()
+        expenses = conn.execute(
+            "SELECT * FROM expenses WHERE date BETWEEN ? AND ? ORDER BY date ASC",
+            (start_date, end_date)
+        ).fetchall()
+
+        total_income = sum([i['amount'] for i in incomes]) if incomes else 0
+        total_expense = sum([e['amount'] for e in expenses]) if expenses else 0
+        net = total_income - total_expense
+
         customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
-
-        # รายวัน
-        today_income = conn.execute("SELECT SUM(amount) FROM income WHERE date=?", (today,)).fetchone()[0] or 0
-        today_expense = conn.execute("SELECT SUM(amount) FROM expenses WHERE date=?", (today,)).fetchone()[0] or 0
-        today_net = today_income - today_expense
-
-        # แยกเงินสด/เงินโอน
-        cash_income = conn.execute("SELECT SUM(amount) FROM income WHERE date=? AND source='เงินสด'", (today,)).fetchone()[0] or 0
-        transfer_income = conn.execute("SELECT SUM(amount) FROM income WHERE date=? AND source='เงินโอน'", (today,)).fetchone()[0] or 0
-        total_inflow = cash_income + transfer_income
-        remaining_after_expense = total_inflow - today_expense
-
-        # รายเดือน
-        monthly_income = conn.execute("SELECT SUM(amount) FROM income WHERE substr(date,1,7)=?", (current_month,)).fetchone()[0] or 0
-        monthly_expense = conn.execute("SELECT SUM(amount) FROM expenses WHERE substr(date,1,7)=?", (current_month,)).fetchone()[0] or 0
-        monthly_net = monthly_income - monthly_expense
 
     return render_template('index.html',
                            incomes=incomes,
                            expenses=expenses,
-                           customers=customers,
+                           total_income=total_income,
+                           total_expense=total_expense,
+                           net=net,
                            current_date=today,
-                           today_income=today_income,
-                           today_expense=today_expense,
-                           today_net=today_net,
-                           cash_income=cash_income,
-                           transfer_income=transfer_income,
-                           total_inflow=total_inflow,
-                           remaining_after_expense=remaining_after_expense,
-                           monthly_income=monthly_income,
-                           monthly_expense=monthly_expense,
-                           monthly_net=monthly_net)
+                           start_date=start_date,
+                           end_date=end_date,
+                           customers=customers)
 
 # -----------------------------
 # Add Income
@@ -78,18 +79,28 @@ def add_income():
 # -----------------------------
 # Add Expense
 # -----------------------------
-@app.route('/add_expense', methods=['POST'])
+@app.route('/add_expense', methods=['GET', 'POST'])
 def add_expense():
-    date_val = request.form['date']
-    item = request.form['item']
-    amount = float(request.form['amount'])
-    note = request.form.get('note')
-
     with get_db_connection() as conn:
-        conn.execute("INSERT INTO expenses (date, item, amount, note) VALUES (?, ?, ?, ?)",
-                     (date_val, item, amount, note))
-        conn.commit()
-    return redirect(url_for('index'))
+        # ดึงราคาที่เคยใช้มาเป็นไกด์
+        past_amounts = conn.execute(
+            "SELECT DISTINCT amount FROM expenses ORDER BY amount ASC"
+        ).fetchall()
+
+        if request.method == 'POST':
+            item = request.form['item']
+            amount = request.form.get('amount')  # ✅ ใช้ช่องกรอกเองเสมอ
+            note = request.form.get('note')
+
+            conn.execute(
+                "INSERT INTO expenses (date, item, amount, note) VALUES (?, ?, ?, ?)",
+                (date.today().isoformat(), item, amount, note)
+            )
+            conn.commit()
+            return redirect(url_for('index'))
+
+    return render_template('add_expense.html', past_amounts=past_amounts)
+
 
 # -----------------------------
 # Edit Income
@@ -107,12 +118,17 @@ def edit_income(id):
             note = request.form.get('note')
             customer_id = request.form.get('customer_id')
 
-            conn.execute("UPDATE income SET date=?, source=?, amount=?, note=?, customer_id=? WHERE id=?",
-                         (date_val, source, amount, note, customer_id, id))
+            conn.execute(
+                "UPDATE income SET date=?, source=?, amount=?, note=?, customer_id=? WHERE id=?",
+                (date_val, source, amount, note, customer_id, id)
+            )
             conn.commit()
-            return redirect(url_for('index'))
+
+            # ✅ redirect กลับไปที่ช่วงวันที่ที่แก้ไข
+            return redirect(url_for('report', start_date=date_val, end_date=date_val))
 
     return render_template('edit_income.html', income=income, customers=customers)
+
 
 # -----------------------------
 # Delete Income
@@ -126,24 +142,25 @@ def delete_income(id):
 
 # -----------------------------
 # Edit Expense
-# -----------------------------
-@app.route('/edit_expense/<int:id>', methods=['GET', 'POST'])
+@app.route('/edit_expense/<int:id>', methods=['POST'])
 def edit_expense(id):
+    date_val = request.form.get('date') or date.today().isoformat()
+    item = request.form.get('item') or ""
+    amount = float(request.form.get('amount', 0))
+    note = request.form.get('note')
+
+    # ถ้า item ว่าง → กัน error NOT NULL
+    if not item.strip():
+        return redirect(url_for('report', start_date=date_val, end_date=date_val))
+
     with get_db_connection() as conn:
-        expense = conn.execute("SELECT * FROM expenses WHERE id=?", (id,)).fetchone()
+        conn.execute(
+            "UPDATE expenses SET date=?, item=?, amount=?, note=? WHERE id=?",
+            (date_val, item, amount, note, id)
+        )
+        conn.commit()
 
-        if request.method == 'POST':
-            date_val = request.form['date']
-            item = request.form['item']
-            amount = float(request.form['amount'])
-            note = request.form.get('note')
-
-            conn.execute("UPDATE expenses SET date=?, item=?, amount=?, note=? WHERE id=?",
-                         (date_val, item, amount, note, id))
-            conn.commit()
-            return redirect(url_for('index'))
-
-    return render_template('edit_expense.html', expense=expense)
+    return redirect(url_for('report', start_date=date_val, end_date=date_val))
 
 # -----------------------------
 # Delete Expense
@@ -156,17 +173,29 @@ def delete_expense(id):
     return redirect(url_for('index'))
 
 
-@app.route('/save_report', methods=['POST'])
+@app.route("/save_report", methods=["POST"])
 def save_report():
     data = request.get_json()
-    with get_db_connection() as conn:
-        conn.execute("""
-            INSERT INTO reports (date, cash, transfer, other, expense, income, net)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (data['date'], data['cash'], data['transfer'], data['other'],
-              data['expense'], data['income'], data['net']))
-        conn.commit()
-    return {"message": "บันทึกข้อมูลเรียบร้อยแล้ว!"}
+
+    report_date = data.get("date")
+    cash = data.get("cash", 0)
+    transfer = data.get("transfer", 0)
+    other = data.get("other", 0)
+    expense = data.get("expense", 0)
+    income = data.get("income", 0)
+    net = data.get("net", 0)
+
+    conn = get_db_connection()
+    conn.execute("""
+        INSERT INTO reports (date, cash, transfer, other, expense, income, net)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (report_date, cash, transfer, other, expense, income, net)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "บันทึกข้อมูลเรียบร้อยแล้ว!"})
 
 @app.route('/compare_realtime')
 def compare_realtime():
@@ -188,6 +217,50 @@ def compare_realtime():
                            reports=reports,
                            monthly_reports=monthly_reports,
                            current_date=date.today().strftime("%Y-%m-%d"))
+
+@app.route('/customers')
+def customers():
+    with get_db_connection() as conn:
+        customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
+    return render_template('customers.html', customers=customers)
+
+
+@app.route('/report')
+def report():
+    today = date.today().strftime("%Y-%m-%d")
+    start_date = request.args.get('start_date', today)
+    end_date = request.args.get('end_date', today)
+
+    with get_db_connection() as conn:
+        incomes = conn.execute(
+            "SELECT i.id, i.date, c.name as customer_name, i.source, i.amount, i.note "
+            "FROM income i LEFT JOIN customers c ON i.customer_id=c.id "
+            "WHERE i.date BETWEEN ? AND ? ORDER BY i.date ASC",
+            (start_date, end_date)
+        ).fetchall()
+
+        expenses = conn.execute(
+            "SELECT * FROM expenses WHERE date BETWEEN ? AND ? ORDER BY date ASC",
+            (start_date, end_date)
+        ).fetchall()
+
+        # ✅ คำนวณรวมตามช่วงเวลา
+        total_income = sum([i['amount'] for i in incomes]) if incomes else 0
+        total_expense = sum([e['amount'] for e in expenses]) if expenses else 0
+        net = total_income - total_expense
+
+        customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
+
+    return render_template('index.html',
+                           incomes=incomes,
+                           expenses=expenses,
+                           total_income=total_income,
+                           total_expense=total_expense,
+                           net=net,   # ✅ ส่งค่า net เข้าไป
+                           current_date=today,
+                           start_date=start_date,
+                           end_date=end_date,
+                           customers=customers)
 
 
 if __name__ == '__main__':

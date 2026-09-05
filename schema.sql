@@ -88,3 +88,13 @@ CREATE TABLE IF NOT EXISTS customers (
     name TEXT NOT NULL
 );
 
+CREATE TABLE reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    cash REAL DEFAULT 0,
+    transfer REAL DEFAULT 0,
+    other REAL DEFAULT 0,
+    expense REAL DEFAULT 0,
+    income REAL DEFAULT 0,
+    net REAL DEFAULT 0
+);

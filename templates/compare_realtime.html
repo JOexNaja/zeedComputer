@@ -29,13 +29,13 @@
 
     <!-- ตารางสรุป -->
     <table class="table table-bordered mt-4">
-      <tr><th>เงินสด</th><td id="cash_total">0</td></tr>
-      <tr><th>เงินโอน</th><td id="transfer_total">0</td></tr>
-      <tr><th>รวมรายการอื่น ๆ</th><td id="other_total">0</td></tr>
-      <tr class="table-info"><th>รวมรายรับ</th><td id="income_total">0</td></tr>
-      <tr class="table-danger"><th>รวมรายจ่าย</th><td id="expense_total">0</td></tr>
-      <tr class="table-warning"><th>สุทธิ (รายรับ - รายจ่าย)</th><td id="net_total">0</td></tr>
-      <tr class="table-primary"><th>สรุปทั้งหมด</th><td id="transfer_minus_expense">0</td></tr>
+      <tr><th>เงินสด</th><td id="cash_total">0.00</td></tr>
+      <tr><th>เงินโอน</th><td id="transfer_total">0.00</td></tr>
+      <tr><th>รวมรายการอื่น ๆ</th><td id="other_total">0.00</td></tr>
+      <tr class="table-info"><th>รวมรายรับ</th><td id="income_total">0.00</td></tr>
+      <tr class="table-danger"><th>รวมรายจ่าย</th><td id="expense_total">0.00</td></tr>
+      <tr class="table-warning"><th>สุทธิ (รายรับ - รายจ่าย)</th><td id="net_total">0.00</td></tr>
+      <tr class="table-primary"><th>สรุปทั้งหมด</th><td id="transfer_minus_expense">0.00</td></tr>
     </table>
 
     <button type="button" class="btn btn-success mt-3" onclick="saveReport()">บันทึกข้อมูล</button>
@@ -85,99 +85,122 @@
 </table>
 {% endblock %}
 
+{% block scripts %}
 <script>
-function parseSum(str) {
-  if (!str) return 0;
-  return str.split('+').map(s => parseFloat(s.trim()) || 0).reduce((a,b) => a+b, 0);
-}
+document.addEventListener("DOMContentLoaded", function() {
 
-function calculate() {
-  let cash = parseSum(document.getElementById('cash_income').value);
-  let transfer = parseSum(document.getElementById('transfer_income').value);
+  function parseSum(str) {
+    if (!str) return 0;
+    return str.split('+').map(s => parseFloat(s.trim()) || 0).reduce((a,b) => a+b, 0);
+  }
 
-  let otherAmounts = document.querySelectorAll('.other-amount');
-  let otherTotal = 0;
-  otherAmounts.forEach(input => { otherTotal += parseFloat(input.value) || 0; });
+  function calculate() {
+    let cash = parseSum(document.getElementById('cash_income').value);
+    let transfer = parseSum(document.getElementById('transfer_income').value);
 
-  let expenseAmounts = document.querySelectorAll('.expense-amount');
-  let expenseTotal = 0;
-  expenseAmounts.forEach(input => { expenseTotal += parseFloat(input.value) || 0; });
+    let otherTotal = 0;
+    document.querySelectorAll('.other-amount').forEach(input => {
+      otherTotal += parseFloat(input.value) || 0;
+    });
 
-  let incomeTotal = cash + transfer + otherTotal;
-  let net = incomeTotal - expenseTotal;
-  let transferMinusExpense = transfer - expenseTotal;
+    let expenseTotal = 0;
+    document.querySelectorAll('.expense-amount').forEach(input => {
+      expenseTotal += parseFloat(input.value) || 0;
+    });
 
-  document.getElementById('cash_total').innerText = cash;
-  document.getElementById('transfer_total').innerText = transfer;
-  document.getElementById('other_total').innerText = otherTotal;
-  document.getElementById('income_total').innerText = incomeTotal;
-  document.getElementById('expense_total').innerText = expenseTotal;
-  document.getElementById('net_total').innerText = net;
-  document.getElementById('transfer_minus_expense').innerText = transferMinusExpense;
-}
+    let incomeTotal = cash + transfer + otherTotal;
+    let net = incomeTotal - expenseTotal;
+    let transferMinusExpense = transfer - expenseTotal;
 
-function addExpense() {
-  let div = document.createElement('div');
-  div.className = "input-group mb-2";
-  div.innerHTML = `
-    <input type="text" class="form-control expense-name" placeholder="ชื่อรายการ เช่น ค่า HDD">
-    <input type="number" class="form-control expense-amount" placeholder="จำนวนเงิน">
-  `;
-  document.getElementById('expense-list').appendChild(div);
-  div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
-}
+    document.getElementById('cash_total').innerText = cash.toFixed(2);
+    document.getElementById('transfer_total').innerText = transfer.toFixed(2);
+    document.getElementById('other_total').innerText = otherTotal.toFixed(2);
+    document.getElementById('income_total').innerText = incomeTotal.toFixed(2);
+    document.getElementById('expense_total').innerText = expenseTotal.toFixed(2);
+    document.getElementById('net_total').innerText = net.toFixed(2);
+    document.getElementById('transfer_minus_expense').innerText = transferMinusExpense.toFixed(2);
+  }
 
-function addOther() {
-  let div = document.createElement('div');
-  div.className = "input-group mb-2";
-  div.innerHTML = `
-    <input type="text" class="form-control other-name" placeholder="ชื่อรายการ เช่น โบนัส">
-    <input type="number" class="form-control other-amount" placeholder="จำนวนเงิน">
-  `;
-  document.getElementById('other-list').appendChild(div);
-  div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
-}
+  function addExpense() {
+    let div = document.createElement('div');
+    div.className = "input-group mb-2";
+    div.innerHTML = `
+      <input type="text" class="form-control expense-name" placeholder="ชื่อรายการ">
+      <input type="number" class="form-control expense-amount" placeholder="ราคา">
+      <button type="button" class="btn btn-danger btn-sm">ลบ</button>
+    `;
+    div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
+    div.querySelector("button").addEventListener("click", () => { div.remove(); calculate(); });
+    document.getElementById('expense-list').appendChild(div);
+  }
 
-// bind ปุ่ม + ให้ทำงาน
-document.getElementById('btn-add-expense').addEventListener('click', addExpense);
-document.getElementById('btn-add-other').addEventListener('click', addOther);
+  function addOther() {
+    let div = document.createElement('div');
+    div.className = "input-group mb-2";
+    div.innerHTML = `
+      <input type="text" class="form-control other-name" placeholder="ชื่อรายการ">
+      <input type="number" class="form-control other-amount" placeholder="ราคา">
+      <button type="button" class="btn btn-danger btn-sm">ลบ</button>
+    `;
+    div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
+    div.querySelector("button").addEventListener("click", () => { div.remove(); calculate(); });
+    document.getElementById('other-list').appendChild(div);
+  }
 
-// bind input หลัก
-document.querySelectorAll('#cash_income, #transfer_income').forEach(el => {
-  el.addEventListener('input', calculate);
+  document.getElementById('btn-add-expense').addEventListener('click', addExpense);
+  document.getElementById('btn-add-other').addEventListener('click', addOther);
+
+  document.querySelectorAll('#cash_income, #transfer_income').forEach(el => {
+    el.addEventListener('input', calculate);
+  });
+
+  calculate();
+
+  function saveReport() {
+    let reportDate = document.getElementById('report_date').value;
+    let cash = parseSum(document.getElementById('cash_income').value);
+    let transfer = parseSum(document.getElementById('transfer_income').value);
+
+    let otherTotal = 0;
+    document.querySelectorAll('.other-amount').forEach(input => {
+      otherTotal += parseFloat(input.value) || 0;
+    });
+
+    let expenseTotal = 0;
+    document.querySelectorAll('.expense-amount').forEach(input => {
+      expenseTotal += parseFloat(input.value) || 0;
+    });
+
+    let incomeTotal = cash + transfer + otherTotal;
+    let net = incomeTotal - expenseTotal;
+
+    fetch("/save_report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: reportDate,
+        cash: cash,
+        transfer: transfer,
+        other: otherTotal,
+        expense: expenseTotal,
+        income: incomeTotal,
+        net: net
+      })
+       }).then(res => res.json())
+      .then(data => {
+        // แสดงข้อความตอบกลับจาก server
+        alert(data.message);
+        // รีเฟรชหน้าเพื่ออัปเดตตารางย้อนหลัง/รายเดือน
+        location.reload();
+      })
+      .catch(err => {
+        console.error("เกิดข้อผิดพลาด:", err);
+        alert("บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      });
+  }
+
+  // ให้ saveReport ใช้งานได้จากปุ่ม
+  window.saveReport = saveReport;
 });
-
-calculate();
-
-function saveReport() {
-  let reportDate = document.getElementById('report_date').value;
-  let cash = parseSum(document.getElementById('cash_income').value);
-  let transfer = parseSum(document.getElementById('transfer_income').value);
-
-  let otherAmounts = document.querySelectorAll('.other-amount');
-  let otherTotal = 0;
-  otherAmounts.forEach(input => { otherTotal += parseFloat(input.value) || 0; });
-
-  let expenseAmounts = document.querySelectorAll('.expense-amount');
-  let expenseTotal = 0;
-  expenseAmounts.forEach(input => { expenseTotal += parseFloat(input.value) || 0; });
-
-  let incomeTotal = cash + transfer + otherTotal;
-  let net = incomeTotal - expenseTotal;
-
-  fetch("/save_report", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      date: reportDate,
-      cash: cash,
-      transfer: transfer,
-      other: otherTotal,
-      expense: expenseTotal,
-      income: incomeTotal,
-      net: net
-    })
-  }).then(res => res.json())
-    .then(data => alert(data.message));
-}
 </script>
+{% endblock scripts %}
