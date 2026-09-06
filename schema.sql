@@ -9,11 +9,13 @@ CREATE TABLE IF NOT EXISTS customers (
 -- ตารางรายรับ (เชื่อมกับลูกค้า)
 CREATE TABLE IF NOT EXISTS income (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT NOT NULL,
-    source TEXT NOT NULL,
-    amount REAL NOT NULL,
-    note TEXT,
-    customer_id INTEGER,
+    date TEXT NOT NULL,          -- วันที่บันทึก
+    customer_id INTEGER,         -- ลูกค้า (เชื่อมกับ customers)
+    activity TEXT,               -- กิจกรรม เช่น ลงโปรแกรม, ขายแรม
+    amount REAL,                 -- ราคากิจกรรม
+    shop_get REAL,               -- ยอดที่ร้านได้
+    discount REAL,               -- ส่วนลด/ผลตอบแทนลูกค้า
+    note TEXT,                   -- หมายเหตุเพิ่มเติม
     FOREIGN KEY (customer_id) REFERENCES customers (id)
 );
 

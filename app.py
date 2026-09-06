@@ -62,19 +62,36 @@ def index():
 # -----------------------------
 # Add Income
 # -----------------------------
-@app.route('/add_income', methods=['POST'])
+@app.route("/add_income", methods=["POST"])
 def add_income():
-    date_val = request.form['date']
-    source = request.form['source']
-    amount = float(request.form['amount'])
-    note = request.form.get('note')
-    customer_id = request.form.get('customer_id')
+    today = date.today().strftime("%Y-%m-%d")
 
-    with get_db_connection() as conn:
-        conn.execute("INSERT INTO income (date, source, amount, note, customer_id) VALUES (?, ?, ?, ?, ?)",
-                     (date_val, source, amount, note, customer_id))
-        conn.commit()
-    return redirect(url_for('index'))
+    customer_id = request.form.get("customer_id")
+    activities = request.form.getlist("activity[]")
+    amounts = request.form.getlist("amount[]")
+    shop_get = request.form.get("shop_get")
+    date_val = request.form.get("date", today)
+    note = request.form.get("note")
+
+    # คำนวณส่วนลด (ผลตอบแทนลูกค้า)
+    total = sum([float(a) for a in amounts if a])
+    discount = float(total) - float(shop_get or 0)
+
+    conn = get_db_connection()
+    for activity, amount in zip(activities, amounts):
+        if activity or amount:  # บันทึกเฉพาะแถวที่มีข้อมูล
+            conn.execute(
+                """
+                INSERT INTO income (date, customer_id, activity, amount, shop_get, discount, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (date_val, customer_id, activity, amount, shop_get, discount, note)
+            )
+    conn.commit()
+    conn.close()
+
+    return redirect("/report")
+
 
 # -----------------------------
 # Add Expense
@@ -218,11 +235,44 @@ def compare_realtime():
                            monthly_reports=monthly_reports,
                            current_date=date.today().strftime("%Y-%m-%d"))
 
-@app.route('/customers')
+@app.route('/customers', methods=['GET', 'POST'])
 def customers():
     with get_db_connection() as conn:
+        if request.method == 'POST':
+            name = request.form['name']
+            phone = request.form.get('phone')
+            note = request.form.get('note')
+            conn.execute("INSERT INTO customers (name, phone, note) VALUES (?, ?, ?)",
+                         (name, phone, note))
+            conn.commit()
+
         customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
     return render_template('customers.html', customers=customers)
+
+@app.route('/edit_customer/<int:id>', methods=['GET', 'POST'])
+def edit_customer(id):
+    conn = get_db_connection()
+    if request.method == 'POST':
+        name = request.form['name']
+        phone = request.form.get('phone')
+        note = request.form.get('note')
+        conn.execute("UPDATE customers SET name=?, phone=?, note=? WHERE id=?",
+                     (name, phone, note, id))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('customers'))
+    customer = conn.execute("SELECT * FROM customers WHERE id=?", (id,)).fetchone()
+    conn.close()
+    return render_template('edit_customer.html', customer=customer)
+
+
+@app.route('/delete_customer/<int:id>', methods=['GET'])
+def delete_customer(id):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM customers WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('customers'))
 
 
 @app.route('/report')
@@ -261,6 +311,35 @@ def report():
                            start_date=start_date,
                            end_date=end_date,
                            customers=customers)
+
+
+@app.route("/monthly_report")
+def monthly_report():
+    conn = get_db_connection()
+    rows = conn.execute("""
+        SELECT strftime('%Y-%m', date) AS month,
+               SUM(amount) AS total_income
+        FROM income
+        GROUP BY month
+    """).fetchall()
+
+    # ตัวอย่างสำหรับรายจ่าย
+    expenses = conn.execute("""
+        SELECT strftime('%Y-%m', date) AS month,
+               SUM(amount) AS total_expense
+        FROM expenses
+        GROUP BY month
+    """).fetchall()
+
+    labels = [row["month"] for row in rows]
+    income_data = [row["total_income"] for row in rows]
+    expense_data = [row["total_expense"] for row in expenses]
+
+    conn.close()
+    return render_template("monthly_report.html",
+                           labels=labels,
+                           income_data=income_data,
+                           expense_data=expense_data)
 
 
 if __name__ == '__main__':

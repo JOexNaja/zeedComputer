@@ -28,55 +28,75 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 
 
-
-
 <!-- ฟอร์มเพิ่มรายรับ -->
 <div class="card mb-4">
+  <label>วันที่:</label>
+<input type="date" name="date" class="form-control mb-2" value="{{ current_date }}">
   <div class="card-header bg-primary text-white">เพิ่มรายรับ</div>
   <div class="card-body">
-    <form action="/add_income" method="POST">
-      <select name="customer_id" class="form-control mb-2" required>
-        <option value="">-- เลือกลูกค้า --</option>
-        {% for c in customers %}
-        <option value="{{ c.id }}">{{ c.name }}</option>
-        {% endfor %}
-      </select>
-      <input type="text" name="activity" class="form-control mb-2" placeholder="กิจกรรม/ทำอะไร" required>
-      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="ราคา" required>
-      <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
-      <button type="submit" class="btn btn-primary">บันทึกรายรับ</button>
+    <form id="income-form" action="/add_income" method="POST">
+      <!-- เลือกลูกค้า (ค่าเริ่มต้นเป็น ร้าน) -->
+      <select name="customer_id" class="form-control">
+  {% for customer in customers %}
+    <option value="{{ customer.id }}" {% if customer.id == 1 %}selected{% endif %}>
+      {{ customer.name }}
+    </option>
+  {% endfor %}
+</select>
+
+      <!-- รายการกิจกรรม -->
+      <div id="activity-list"></div>
+      <button type="button" id="btn-add-activity" class="btn btn-outline-secondary mb-2">+ เพิ่มกิจกรรม</button>
+
+      <!-- ยอดรวม -->
+      <div class="mt-3">
+        <strong>รวมกิจกรรม:</strong> <span id="activity_total">0.00</span><br>
+        <label>ยอดที่ร้านได้:</label>
+        <input type="number" step="0.01" id="shop_get" name="shop_get" class="form-control mb-2" placeholder="ยอดที่ร้านได้">
+        <strong>ผลตอบแทน/ส่วนลด:</strong> <span id="discount_total">0.00</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary mt-2">บันทึกรายรับ</button>
     </form>
   </div>
 </div>
 
-<!-- ฟอร์มเพิ่มรายจ่าย -->
-<div class="card mb-4">
-  <div class="card-header bg-danger text-white">เพิ่มรายจ่าย</div>
-  <div class="card-body">
-    <form action="/add_expense" method="POST">
-      
-      <!-- รายการ -->
-      <input type="text" name="item" class="form-control mb-2" placeholder="รายการ (เช่น SSD 256)" required>
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
 
-      <!-- ราคา -->
-      <label>ราคา</label>
-      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="กรอกราคาใหม่" autocomplete="off">
+  function calculate() {
+    let total = 0;
+    document.querySelectorAll('.activity-amount').forEach(input => {
+      total += parseFloat(input.value) || 0;
+    });
+    document.getElementById('activity_total').innerText = total.toFixed(2);
 
-      <!-- ไกด์ราคาที่เคยใช้ -->
-      <small class="text-muted">
-        ราคาที่เคยใช้: 
-        {% for a in past_amounts %}
-          {{ a['amount'] }}{% if not loop.last %}, {% endif %}
-        {% endfor %}
-      </small>
+    let shopGet = parseFloat(document.getElementById('shop_get').value) || 0;
+    let discount = total - shopGet;
+    document.getElementById('discount_total').innerText = discount.toFixed(2);
+  }
 
-      <!-- หมายเหตุ -->
-      <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
+  function addActivity() {
+  let div = document.createElement('div');
+  div.className = "d-flex mb-2";
+  div.innerHTML = `
+    <input type="text" name="activity[]" class="form-control me-2" placeholder="กิจกรรม">
+    <input type="number" step="0.01" name="amount[]" class="form-control activity-amount me-2" placeholder="ราคา">
+    <input type="text" name="note[]" class="form-control me-2" placeholder="หมายเหตุ">
+    <button type="button" class="btn btn-danger btn-sm">ลบ</button>
+  `;
+  div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
+  div.querySelector("button").addEventListener("click", () => { div.remove(); calculate(); });
 
-      <button type="submit" class="btn btn-danger">บันทึกรายจ่าย</button>
-    </form>
-  </div>
-</div>
+  document.getElementById('activity-list').appendChild(div);
+}
+
+  // เริ่มต้นมีแถวแรกทันที
+  addActivity();
+});
+</script>
+{% endblock scripts %}
 
 
 
@@ -201,6 +221,71 @@ function toggleEdit(btn) {
     </tr>
     {% endfor %}
   </tbody>
+</table>
+
+
+<!-- ฟอร์มเพิ่มรายจ่าย -->
+<div class="card mb-4">
+  <div class="card-header bg-danger text-white">เพิ่มรายจ่าย</div>
+  <div class="card-body">
+    <form action="/add_expense" method="POST">
+      <input type="text" name="item" class="form-control mb-2" placeholder="รายการ" required>
+      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="ราคา" required>
+      <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
+      <button type="submit" class="btn btn-danger">บันทึกรายจ่าย</button>
+    </form>
+  </div>
+</div>
+
+<!-- ตารางรายรับ -->
+<h3>รายรับ ({{ start_date }} ถึง {{ end_date }})</h3>
+<table class="table">
+  <tr>
+    <th>วันที่</th><th>ลูกค้า</th><th>กิจกรรม</th><th>ราคา</th><th>หมายเหตุ</th><th>การจัดการ</th>
+  </tr>
+  {% for income in incomes %}
+  <tr>
+    <td>{{ income.date }}</td>
+    <td>{{ income.customer_name }}</td>
+    <td>{{ income.activity }}</td>
+    <td>{{ income.amount }}</td>
+    <td>{{ income.note }}</td>
+    <td>
+      <a href="/edit_income/{{ income.id }}" class="btn btn-sm btn-warning">แก้ไข</a>
+      <a href="/delete_income/{{ income.id }}" class="btn btn-sm btn-danger"
+         onclick="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายรับนี้?');">ลบ</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- ตารางรายจ่าย -->
+<h3>รายจ่าย ({{ start_date }} ถึง {{ end_date }})</h3>
+<table class="table">
+  <tr>
+    <th>วันที่</th><th>รายการ</th><th>ราคา</th><th>หมายเหตุ</th><th>การจัดการ</th>
+  </tr>
+  {% for expense in expenses %}
+  <tr>
+    <td>{{ expense.date }}</td>
+    <td>{{ expense.item }}</td>
+    <td>{{ expense.amount }}</td>
+    <td>{{ expense.note }}</td>
+    <td>
+      <a href="/edit_expense/{{ expense.id }}" class="btn btn-sm btn-warning">แก้ไข</a>
+      <a href="/delete_expense/{{ expense.id }}" class="btn btn-sm btn-danger"
+         onclick="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายจ่ายนี้?');">ลบ</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- สรุป -->
+<h3>สรุป ({{ start_date }} ถึง {{ end_date }})</h3>
+<table class="table">
+  <tr><th>รวมรายรับ</th><td>{{ total_income }}</td></tr>
+  <tr><th>รวมรายจ่าย</th><td>{{ total_expense }}</td></tr>
+  <tr><th>สุทธิ</th><td>{{ net_balance }}</td></tr>
 </table>
 
 

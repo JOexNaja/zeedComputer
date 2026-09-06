@@ -2,12 +2,13 @@
 {% block content %}
 <h2>ฐานลูกค้า</h2>
 
-<form method="POST" action="/add_customer">
+<form method="POST" action="/customers">
   <input type="text" name="name" class="form-control mb-2" placeholder="ชื่อลูกค้า" required>
   <input type="text" name="phone" class="form-control mb-2" placeholder="เบอร์โทร">
   <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
   <button type="submit" class="btn btn-primary">เพิ่มลูกค้า</button>
 </form>
+
 
 <table class="table mt-4">
   <tr>
@@ -20,7 +21,12 @@
     <td>{{ customer.note }}</td>
     <td>
   <a href="/edit_customer/{{ customer.id }}" class="btn btn-sm btn-warning">แก้ไข</a>
-  <a href="/delete_customer/{{ customer.id }}" class="btn btn-sm btn-danger">ลบ</a>
+  <a href="/delete_customer/{{ customer.id }}" 
+   class="btn btn-sm btn-danger"
+   onclick="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบลูกค้า {{ customer.name }} ?');">
+   ลบ
+</a>
+
 </td>
 
   </tr>
