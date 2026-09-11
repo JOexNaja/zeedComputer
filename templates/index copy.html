@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>ระบบบันทึกรายรับ–รายจ่าย</h1>
+
+<!-- ฟอร์มเลือกช่วงเวลา -->
+<form method="get" action="/report" class="row g-3 mb-4">
+  <div class="col-auto">
+    <label>วันที่เริ่มต้น:</label>
+    <input type="date" name="start_date" class="form-control" value="{{ start_date }}" lang="en-CA">
+  </div>
+  <div class="col-auto">
+    <label>วันที่สิ้นสุด:</label>
+    <input type="date" name="end_date" class="form-control" value="{{ end_date }}" lang="en-CA">
+  </div>
+  <div class="col-auto align-self-end">
+    <button type="submit" class="btn btn-primary">แสดงผล</button>
+  </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  let today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const startInput = document.querySelector("input[name='start_date']");
+  const endInput = document.querySelector("input[name='end_date']");
+  if (!startInput.value) startInput.value = today;
+  if (!endInput.value) endInput.value = today;
+});
+</script>
+
+
+<!-- ฟอร์มเพิ่มรายรับ -->
+<div class="card mb-4">
+  <label>วันที่:</label>
+<input type="date" name="date" class="form-control mb-2" value="{{ current_date }}">
+  <div class="card-header bg-primary text-white">เพิ่มรายรับ</div>
+  <div class="card-body">
+    <form id="income-form" action="/add_income" method="POST">
+      <!-- เลือกลูกค้า (ค่าเริ่มต้นเป็น ร้าน) -->
+      <select name="customer_id" class="form-control">
+  {% for customer in customers %}
+    <option value="{{ customer.id }}" {% if customer.id == 1 %}selected{% endif %}>
+      {{ customer.name }}
+    </option>
+  {% endfor %}
+</select>
+
+      <!-- รายการกิจกรรม -->
+      <div id="activity-list"></div>
+      <button type="button" id="btn-add-activity" class="btn btn-outline-secondary mb-2">+ เพิ่มกิจกรรม</button>
+
+      <!-- ยอดรวม -->
+      <div class="mt-3">
+        <strong>รวมกิจกรรม:</strong> <span id="activity_total">0.00</span><br>
+        <label>ยอดที่ร้านได้:</label>
+        <input type="number" step="0.01" id="shop_get" name="shop_get" class="form-control mb-2" placeholder="ยอดที่ร้านได้">
+        <strong>ผลตอบแทน/ส่วนลด:</strong> <span id="discount_total">0.00</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary mt-2">บันทึกรายรับ</button>
+    </form>
+  </div>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+
+  function calculate() {
+    let total = 0;
+    document.querySelectorAll('.activity-amount').forEach(input => {
+      total += parseFloat(input.value) || 0;
+    });
+    document.getElementById('activity_total').innerText = total.toFixed(2);
+
+    let shopGet = parseFloat(document.getElementById('shop_get').value) || 0;
+    let discount = total - shopGet;
+    document.getElementById('discount_total').innerText = discount.toFixed(2);
+  }
+
+  function addActivity() {
+  let div = document.createElement('div');
+  div.className = "d-flex mb-2";
+  div.innerHTML = `
+    <input type="text" name="activity[]" class="form-control me-2" placeholder="กิจกรรม">
+    <input type="number" step="0.01" name="amount[]" class="form-control activity-amount me-2" placeholder="ราคา">
+    <input type="text" name="note[]" class="form-control me-2" placeholder="หมายเหตุ">
+    <button type="button" class="btn btn-danger btn-sm">ลบ</button>
+  `;
+  div.querySelectorAll('input').forEach(el => el.addEventListener('input', calculate));
+  div.querySelector("button").addEventListener("click", () => { div.remove(); calculate(); });
+
+  document.getElementById('activity-list').appendChild(div);
+}
+
+  // เริ่มต้นมีแถวแรกทันที
+  addActivity();
+});
+</script>
+{% endblock scripts %}
+
+<script>
+function recalcRow(row) {
+  let amount = parseFloat(row.querySelector('input[name="amount"]').value) || 0;
+  let shopGet = parseFloat(row.querySelector('input[name="shop_get"]').value) || 0;
+  let discount = amount - shopGet;
+  row.querySelector('input[name="discount"]').value = discount.toFixed(2);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  document.querySelectorAll("tr").forEach(row => {
+    let amountInput = row.querySelector('input[name="amount"]');
+    let shopGetInput = row.querySelector('input[name="shop_get"]');
+    if(amountInput && shopGetInput){
+      amountInput.addEventListener("input", () => recalcRow(row));
+      shopGetInput.addEventListener("input", () => recalcRow(row));
+    }
+  });
+});
+</script>
+
+
+<h2>📈 รายรับ ({{ start_date }} ถึง {{ end_date }})</h2>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>วันที่</th>
+      <th>ลูกค้า</th>
+      <th>กิจกรรม</th>
+      <th>ราคา</th>
+      <th>ยอดที่ร้านได้</th>        <!-- ✅ เพิ่ม -->
+      <th>ส่วนลด/ผลตอบแทน</th>     <!-- ✅ เพิ่ม -->
+      <th>หมายเหตุ</th>
+      <th>การจัดการ</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for income in incomes %}
+    <tr>
+      <!-- วันที่ -->
+      <td>
+        <span class="view">{{ income.date|thai_date }}</span>
+        <input type="date" name="date" value="{{ income.date }}" class="form-control edit d-none">
+      </td>
+
+      <!-- ลูกค้า -->
+      <td>
+        <span class="view">{{ income.customer_name }}</span>
+        <select name="customer_id" class="form-control edit d-none">
+          {% for c in customers %}
+          <option value="{{ c.id }}" {% if c.name == income.customer_name %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </td>
+
+      <!-- กิจกรรม -->
+      <td>
+        <span class="view">{{ income.activity }}</span>
+        <input type="text" name="activity" value="{{ income.activity }}" class="form-control edit d-none">
+      </td>
+
+      <!-- ราคา -->
+      <td>
+        <span class="view">{{ income.amount }}</span>
+        <input type="number" step="0.01" name="amount" value="{{ income.amount }}" class="form-control edit d-none">
+      </td>
+
+      <!-- ยอดที่ร้านได้ -->
+      <td>
+        <span class="view">{{ income.shop_get }}</span>
+        <input type="number" step="0.01" name="shop_get" value="{{ income.shop_get }}" class="form-control edit d-none">
+      </td>
+
+      <!-- ส่วนลด/ผลตอบแทน -->
+      <td>
+        <span class="view">{{ income.discount }}</span>
+        <input type="number" step="0.01" name="discount" value="{{ income.discount }}" class="form-control edit d-none">
+      </td>
+
+      <!-- หมายเหตุ -->
+      <td>
+        <span class="view">{{ income.note }}</span>
+        <input type="text" name="note" value="{{ income.note }}" class="form-control edit d-none">
+      </td>
+
+      <!-- ปุ่ม -->
+      <td>
+        <div class="view">
+          <button type="button" class="btn btn-sm btn-warning" onclick="toggleEdit(this)">แก้ไข</button>
+          <a href="/delete_income/{{ income.id }}" class="btn btn-sm btn-danger"
+             onclick="return confirm('คุณแน่ใจว่าจะลบข้อมูลนี้?')">ลบ</a>
+        </div>
+        <form action="/edit_income/{{ income.id }}" method="POST" class="edit d-none">
+          <button type="submit" class="btn btn-sm btn-success">บันทึก</button>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEdit(this)">ยกเลิก</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function toggleEdit(btn) {
+  const row = btn.closest("tr");
+  row.querySelectorAll(".view").forEach(el => el.classList.toggle("d-none"));
+  row.querySelectorAll(".edit").forEach(el => el.classList.toggle("d-none"));
+}
+</script>
+
+
+<h3>แก้ไขกิจกรรม</h3>
+<table class="table">
+  <tr>
+    <th>กิจกรรม</th><th>ราคา</th><th>หมายเหตุ</th>
+  </tr>
+  {% for income in incomes %}
+  <tr>
+    <td><input type="text" name="activity[]" value="{{ income.activity }}"></td>
+    <td><input type="number" step="0.01" name="amount[]" value="{{ income.amount }}"></td>
+    <td><input type="text" name="note[]" value="{{ income.note }}"></td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h3>สรุปรอบบิล</h3>
+<label>รายรับรวม:</label>
+<input type="number" step="0.01" name="total_income" value="{{ bill.total_income }}">
+<label>ยอดที่ร้านได้:</label>
+<input type="number" step="0.01" name="shop_get" value="{{ bill.shop_get }}">
+<label>ส่วนลด/คืนกำไร:</label>
+<input type="number" step="0.01" name="discount" value="{{ bill.discount }}">
+
+
+<script>
+function recalcBill() {
+  let total = 0;
+  document.querySelectorAll('input[name="amount[]"]').forEach(el => {
+    total += parseFloat(el.value) || 0;
+  });
+  document.querySelector('input[name="total_income"]').value = total.toFixed(2);
+
+  let shopGet = parseFloat(document.querySelector('input[name="shop_get"]').value) || 0;
+  let discount = total - shopGet;
+  document.querySelector('input[name="discount"]').value = discount.toFixed(2);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll('input[name="amount[]"], input[name="shop_get"]').forEach(el => {
+    el.addEventListener("input", recalcBill);
+  });
+});
+</script>
+
+
+
+<h3 class="mt-4">📊 สรุปรอบบิล</h3>
+<table class="table table-bordered">
+  <tr>
+    <th>วันที่</th>
+    <th>ลูกค้า</th>
+    <th>รายรับรวม</th>
+    <th>ยอดที่ร้านได้</th>
+    <th>ส่วนลด/คืนกำไร</th>
+  </tr>
+  {% for bill in bills %}
+  <tr>
+    <td>{{ bill.date }}</td>
+    <td>{{ bill.customer_name }}</td>
+    <td>{{ bill.total_income }}</td>
+    <td>{{ bill.shop_get }}</td>
+    <td>{{ bill.discount }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- ฟอร์มเพิ่มรายจ่าย -->
+<div class="card mb-4">
+  <div class="card-header bg-danger text-white">เพิ่มรายจ่าย</div>
+  <div class="card-body">
+    <form action="/add_expense" method="POST">
+      <input type="text" name="item" class="form-control mb-2" placeholder="รายการ" required>
+      <input type="number" step="0.01" name="amount" class="form-control mb-2" placeholder="ราคา" required>
+      <input type="text" name="note" class="form-control mb-2" placeholder="หมายเหตุ">
+      <button type="submit" class="btn btn-danger">บันทึกรายจ่าย</button>
+    </form>
+  </div>
+</div>
+
+<h2>📉 รายจ่าย ({{ start_date }} ถึง {{ end_date }})</h2>
+<table class="table table-striped">
+  <thead>
+    <tr><th>วันที่</th><th>รายการ</th><th>ราคา</th><th>หมายเหตุ</th><th>การจัดการ</th></tr>
+  </thead>
+  <tbody>
+    {% for expense in expenses %}
+    <tr>
+      <form action="/edit_expense/{{ expense.id }}" method="POST">
+        <!-- วันที่ -->
+        <td>
+          <span class="view">{{ expense.date|thai_date }}</span>
+          <input type="date" name="date" value="{{ expense.date }}" class="form-control edit d-none">
+        </td>
+
+        <!-- รายการ -->
+        <td>
+          <span class="view">{{ expense.item }}</span>
+          <input type="text" name="item" value="{{ expense.item }}" class="form-control edit d-none">
+        </td>
+
+        <!-- ราคา -->
+        <td>
+          <span class="view">{{ expense.amount }}</span>
+          <input type="number" step="0.01" name="amount" value="{{ expense.amount }}" class="form-control edit d-none">
+        </td>
+
+        <!-- หมายเหตุ -->
+        <td>
+          <span class="view">{{ expense.note }}</span>
+          <input type="text" name="note" value="{{ expense.note }}" class="form-control edit d-none">
+        </td>
+
+        <!-- ปุ่ม -->
+        <td>
+          <div class="view">
+            <button type="button" class="btn btn-sm btn-warning" onclick="toggleEdit(this)">แก้ไข</button>
+            <a href="/delete_expense/{{ expense.id }}" class="btn btn-sm btn-danger"
+               onclick="return confirm('คุณแน่ใจว่าจะลบข้อมูลนี้?')">ลบ</a>
+          </div>
+          <div class="edit d-none">
+            <button type="submit" class="btn btn-sm btn-success">บันทึก</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEdit(this)">ยกเลิก</button>
+          </div>
+        </td>
+      </form>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+
+<script>
+function recalcRow(row) {
+  let amount = parseFloat(row.querySelector('input[name="amount"]').value) || 0;
+  let shopGet = parseFloat(row.querySelector('input[name="shop_get"]').value) || 0;
+  let discount = amount - shopGet;
+  row.querySelector('input[name="discount"]').value = discount.toFixed(2);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  document.querySelectorAll("tr").forEach(row => {
+    let amountInput = row.querySelector('input[name="amount"]');
+    let shopGetInput = row.querySelector('input[name="shop_get"]');
+    if(amountInput && shopGetInput){
+      amountInput.addEventListener("input", () => recalcRow(row));
+      shopGetInput.addEventListener("input", () => recalcRow(row));
+    }
+  });
+});
+</script>
+
+
+
+
+
+<!-- สรุปช่วงเวลา -->
+<h2 class="mt-4">สรุป ({{ start_date }} ถึง {{ end_date }})</h2>
+<table class="table table-bordered">
+  <tr><th>รวมรายรับ</th><td>{{ total_income }}</td></tr>
+  <tr><th>รวมรายจ่าย</th><td>{{ total_expense }}</td></tr>
+  <tr class="{% if net >= 0 %}table-success{% else %}table-danger{% endif %}">
+    <th>สุทธิ</th><td>{{ net }}</td>
+  </tr>
+</table>
+
+<h2 class="mt-4">ค่าตอบแทน/ส่วนลดที่ต้องจ่ายวันนี้</h2>
+<table class="table table-striped">
+  <tr>
+    <th>ลูกค้า</th>
+    <th>ผลตอบแทน/ส่วนลด</th>
+  </tr>
+  {% for row in today_discounts %}
+  <tr>
+    <td>{{ row.customer_name }}</td>
+    <td>{{ row.total_discount }}</td>
+  </tr>
+  {% endfor %}
+  <tr class="table-success">
+    <td><strong>รวมทั้งหมด</strong></td>
+    <td><strong>{{ total_discount_today }}</strong></td>
+  </tr>
+</table>
+
+
+<hr>
+
+<!-- ตารางเปรียบเทียบเรียลไทม์ -->
+{% include "compare_realtime.html" %}
+{% endblock %}

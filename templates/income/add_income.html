@@ -1,3 +1,37 @@
+
+<h1>ระบบบันทึกรายรับ–รายจ่าย</h1>
+
+<!-- ฟอร์มเลือกช่วงเวลา -->
+<form method="get" action="/report" class="row g-3 mb-4">
+  <div class="col-auto">
+    <label>วันที่เริ่มต้น:</label>
+    <input type="date" name="start_date" class="form-control"
+           value="{{ start_date }}" lang="en-CA">
+  </div>
+  <div class="col-auto">
+    <label>วันที่สิ้นสุด:</label>
+    <input type="date" name="end_date" class="form-control"
+           value="{{ end_date }}" lang="en-CA">
+  </div>
+  <div class="col-auto align-self-end">
+    <button type="submit" class="btn btn-primary">แสดงผล</button>
+  </div>
+</form>
+
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  let today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const startInput = document.querySelector("input[name='start_date']");
+  const endInput = document.querySelector("input[name='end_date']");
+  if (!startInput.value) startInput.value = today;
+  if (!endInput.value) endInput.value = today;
+});
+</script>
+{% endblock scripts %}
+
+
 <h2>📈 รายรับ ({{ start_date }} ถึง {{ end_date }})</h2>
 
 <!-- ✅ แสดงชุดที่บันทึกแล้ว -->

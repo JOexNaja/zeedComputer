@@ -1,0 +1,24 @@
+project/
+│
+├── app.py                # Flask routes หลัก
+├── database.db           # SQLite DB
+│
+├── templates/            # โฟลเดอร์รวม template
+│   ├── base.html         # Layout หลัก
+│   ├── index.html        # Dashboard รวมทุกส่วน
+│   │
+│   ├── income/           # กลุ่มเกี่ยวกับรายรับ
+│   │   ├── add_income.html
+│   │   ├── edit_income.html
+│   │   └── list_income.html
+│   │
+│   ├── expense/          # กลุ่มเกี่ยวกับรายจ่าย
+│   │   ├── add_expense.html
+│   │   ├── edit_expense.html
+│   │   └── list_expense.html
+│   │
+│   ├── summary/          # กลุ่มเกี่ยวกับสรุป
+│   │   ├── bill_summary.html
+│   │   └── monthly_summary.html
+│
+└── static/               # CSS, JS, รูปภาพ

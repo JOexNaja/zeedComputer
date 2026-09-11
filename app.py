@@ -1,9 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
+
 import sqlite3
 from datetime import date, datetime
 
 
 app = Flask(__name__)
+app.secret_key = "your-secret-key"   # ✅ ใส่ค่าอะไรก็ได้ แต่ควรเป็น string ยาว ๆ
+
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
@@ -23,6 +26,36 @@ def thai_date(value, fmt="%d-%m-%Y"):
 app.jinja_env.filters['thai_date'] = thai_date
 
 
+def generate_ref_id(customer_id, date_val):
+    """
+    สร้าง Ref ID อัตโนมัติ โดยอิงจากลำดับล่าสุดของลูกค้าในวันนั้น
+    รูปแบบ: <customer_id>-<ddmmyy>-<sequence>
+    """
+
+    dt = datetime.strptime(date_val, "%Y-%m-%d")
+    date_str = dt.strftime("%d%m%y")  # เช่น 110926 → 11 Sep 2026
+
+    with get_db_connection() as conn:
+        # ✅ หา ref_id ล่าสุดของลูกค้าในวันนั้น
+        last_ref = conn.execute(
+            "SELECT ref_id FROM bill_summary WHERE customer_id=? AND date=? ORDER BY id DESC LIMIT 1",
+            (customer_id, date_val)
+        ).fetchone()
+
+    if last_ref and last_ref[0]:
+        # ดึง sequence จาก ref_id ล่าสุด เช่น "2-110926-3"
+        try:
+            last_seq = int(last_ref[0].split("-")[-1])
+        except ValueError:
+            last_seq = 0
+        sequence = last_seq + 1
+    else:
+        sequence = 1
+
+    return f"{customer_id}-{date_str}-{sequence}"
+
+
+
 @app.route('/')
 def index():
     today = date.today().strftime("%Y-%m-%d")
@@ -30,34 +63,41 @@ def index():
     end_date = today
 
     with get_db_connection() as conn:
+        # ✅ ดึงรายรับ
         incomes = conn.execute(
-            "SELECT i.id, i.date, c.name as customer_name, i.source, i.amount, i.note "
+            "SELECT i.id, i.date, c.name as customer_name, i.activity, i.amount, i.note "
             "FROM income i LEFT JOIN customers c ON i.customer_id=c.id "
             "WHERE i.date BETWEEN ? AND ? ORDER BY i.date ASC",
             (start_date, end_date)
         ).fetchall()
 
+        # ✅ ดึงรายจ่าย
         expenses = conn.execute(
             "SELECT * FROM expenses WHERE date BETWEEN ? AND ? ORDER BY date ASC",
             (start_date, end_date)
         ).fetchall()
 
+        # ✅ คำนวณรวม
         total_income = sum([i['amount'] for i in incomes]) if incomes else 0
         total_expense = sum([e['amount'] for e in expenses]) if expenses else 0
         net = total_income - total_expense
 
+        # ✅ ดึงลูกค้า
         customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
 
-    return render_template('index.html',
-                           incomes=incomes,
-                           expenses=expenses,
-                           total_income=total_income,
-                           total_expense=total_expense,
-                           net=net,
-                           current_date=today,
-                           start_date=start_date,
-                           end_date=end_date,
-                           customers=customers)
+    return render_template(
+        'index.html',
+        incomes=incomes,
+        expenses=expenses,
+        total_income=total_income,
+        total_expense=total_expense,
+        net=net,
+        current_date=today,
+        start_date=start_date,
+        end_date=end_date,
+        customers=customers
+    )
+
 
 # -----------------------------
 # Add Income
@@ -65,32 +105,93 @@ def index():
 @app.route("/add_income", methods=["POST"])
 def add_income():
     today = date.today().strftime("%Y-%m-%d")
-
     customer_id = request.form.get("customer_id")
     activities = request.form.getlist("activity[]")
     amounts = request.form.getlist("amount[]")
-    shop_get = request.form.get("shop_get")
+    notes = request.form.getlist("note[]")
+    shop_get = float(request.form.get("shop_get") or 0)
     date_val = request.form.get("date", today)
-    note = request.form.get("note")
 
-    # คำนวณส่วนลด (ผลตอบแทนลูกค้า)
-    total = sum([float(a) for a in amounts if a])
-    discount = float(total) - float(shop_get or 0)
+    total_income = sum([float(a) for a in amounts if a])
+    discount = total_income - shop_get
+
+    # ✅ สร้าง Ref ID โดยอิงจากลำดับล่าสุด
+    ref_id = generate_ref_id(customer_id, date_val)
 
     conn = get_db_connection()
-    for activity, amount in zip(activities, amounts):
-        if activity or amount:  # บันทึกเฉพาะแถวที่มีข้อมูล
+
+    # ✅ บันทึกสรุปบิล
+    conn.execute(
+        """
+        INSERT INTO bill_summary (date, customer_id, total_income, shop_get, discount, ref_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (date_val, customer_id, total_income, shop_get, discount, ref_id)
+    )
+    bill_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # ✅ บันทึกรายการกิจกรรม
+    for activity, amount, note in zip(activities, amounts, notes):
+        if activity or amount:
             conn.execute(
                 """
-                INSERT INTO income (date, customer_id, activity, amount, shop_get, discount, note)
+                INSERT INTO income (bill_id, date, customer_id, activity, amount, note, ref_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (date_val, customer_id, activity, amount, shop_get, discount, note)
+                (bill_id, date_val, customer_id, activity, amount, note, ref_id)
             )
+
     conn.commit()
     conn.close()
+        # ✅ เก็บวันที่ล่าสุดไว้ใน session
+    session["last_date"] = date_val
 
     return redirect("/report")
+
+# -----------------------------
+# Edit Income
+# -----------------------------
+
+@app.route("/edit_income/<int:bill_id>", methods=["GET", "POST"])
+def edit_income(bill_id):
+    conn = get_db_connection()
+    if request.method == "POST":
+        date_val = request.form.get("date")
+        customer_id = request.form.get("customer_id")
+        shop_get = float(request.form.get("shop_get") or 0)
+        activities = request.form.getlist("activity[]")
+        amounts = request.form.getlist("amount[]")
+        notes = request.form.getlist("note[]")
+
+        total_income = sum([float(a) for a in amounts if a])
+        discount = total_income - shop_get
+
+        # ✅ update bill_summary
+        conn.execute(
+            "UPDATE bill_summary SET date=?, customer_id=?, total_income=?, shop_get=?, discount=? WHERE id=?",
+            (date_val, customer_id, total_income, shop_get, discount, bill_id)
+        )
+
+        # ✅ clear old incomes
+        conn.execute("DELETE FROM income WHERE bill_id=?", (bill_id,))
+
+        # ✅ insert new incomes
+        for activity, amount, note in zip(activities, amounts, notes):
+            if activity or amount:
+                conn.execute(
+                    "INSERT INTO income (bill_id, date, customer_id, activity, amount, note, ref_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (bill_id, date_val, customer_id, activity, amount, note, f"{customer_id}-{date_val}")
+                )
+
+        conn.commit()
+        conn.close()
+        return redirect("/report")
+    else:
+        bill = conn.execute("SELECT * FROM bill_summary WHERE id=?", (bill_id,)).fetchone()
+        incomes = conn.execute("SELECT * FROM income WHERE bill_id=?", (bill_id,)).fetchall()
+        customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
+        conn.close()
+        return render_template("income/edit_income.html", bill=bill, incomes=incomes, customers=customers)
 
 
 # -----------------------------
@@ -119,33 +220,6 @@ def add_expense():
     return render_template('add_expense.html', past_amounts=past_amounts)
 
 
-# -----------------------------
-# Edit Income
-# -----------------------------
-@app.route('/edit_income/<int:id>', methods=['GET', 'POST'])
-def edit_income(id):
-    with get_db_connection() as conn:
-        income = conn.execute("SELECT * FROM income WHERE id=?", (id,)).fetchone()
-        customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
-
-        if request.method == 'POST':
-            date_val = request.form['date']
-            source = request.form['source']
-            amount = float(request.form['amount'])
-            note = request.form.get('note')
-            customer_id = request.form.get('customer_id')
-
-            conn.execute(
-                "UPDATE income SET date=?, source=?, amount=?, note=?, customer_id=? WHERE id=?",
-                (date_val, source, amount, note, customer_id, id)
-            )
-            conn.commit()
-
-            # ✅ redirect กลับไปที่ช่วงวันที่ที่แก้ไข
-            return redirect(url_for('report', start_date=date_val, end_date=date_val))
-
-    return render_template('edit_income.html', income=income, customers=customers)
-
 
 # -----------------------------
 # Delete Income
@@ -156,6 +230,21 @@ def delete_income(id):
         conn.execute("DELETE FROM income WHERE id=?", (id,))
         conn.commit()
     return redirect(url_for('index'))
+
+# -----------------------------
+# Delete Bill
+# -----------------------------
+@app.route('/delete_bill/<int:id>')
+def delete_bill(id):
+    with get_db_connection() as conn:
+        # ลบกิจกรรมทั้งหมดที่อยู่ในบิลนี้
+        conn.execute("DELETE FROM income WHERE bill_id=?", (id,))
+        # ลบบิลออกจาก bill_summary
+        conn.execute("DELETE FROM bill_summary WHERE id=?", (id,))
+        conn.commit()
+    return redirect(url_for('report'))
+
+
 
 # -----------------------------
 # Edit Expense
@@ -278,39 +367,81 @@ def delete_customer(id):
 @app.route('/report')
 def report():
     today = date.today().strftime("%Y-%m-%d")
+
+    # ✅ ใช้ start_date เป็นตัวกรองหลัก
     start_date = request.args.get('start_date', today)
-    end_date = request.args.get('end_date', today)
+    # ✅ end_date ถ้าไม่เลือก → ใช้ start_date เป็นค่าเดียวกัน
+    end_date   = request.args.get('end_date', start_date)
+
+    selected_customers = request.args.getlist('customers')
+
+    show_income   = 'show_income' in request.args or not request.args
+    show_expense  = 'show_expense' in request.args or not request.args
+    show_discount = 'show_discount' in request.args or not request.args
+    show_summary  = 'show_summary' in request.args or not request.args
 
     with get_db_connection() as conn:
-        incomes = conn.execute(
-            "SELECT i.id, i.date, c.name as customer_name, i.source, i.amount, i.note "
-            "FROM income i LEFT JOIN customers c ON i.customer_id=c.id "
-            "WHERE i.date BETWEEN ? AND ? ORDER BY i.date ASC",
-            (start_date, end_date)
-        ).fetchall()
+        # รายรับ
+        if selected_customers:
+            incomes = conn.execute(
+                "SELECT i.id, i.bill_id, i.date, c.name as customer_name, "
+                "i.activity, i.amount, i.note, i.ref_id "
+                "FROM income i LEFT JOIN customers c ON i.customer_id=c.id "
+                "WHERE i.date BETWEEN ? AND ? AND c.id IN ({}) ORDER BY i.bill_id ASC".format(
+                    ",".join("?"*len(selected_customers))
+                ),
+                [start_date, end_date] + selected_customers
+            ).fetchall()
+        else:
+            incomes = conn.execute(
+                "SELECT i.id, i.bill_id, i.date, c.name as customer_name, "
+                "i.activity, i.amount, i.note, i.ref_id "
+                "FROM income i LEFT JOIN customers c ON i.customer_id=c.id "
+                "WHERE i.date BETWEEN ? AND ? ORDER BY i.bill_id ASC",
+                (start_date, end_date)
+            ).fetchall()
 
+        # รายจ่าย
         expenses = conn.execute(
             "SELECT * FROM expenses WHERE date BETWEEN ? AND ? ORDER BY date ASC",
             (start_date, end_date)
         ).fetchall()
 
-        # ✅ คำนวณรวมตามช่วงเวลา
-        total_income = sum([i['amount'] for i in incomes]) if incomes else 0
-        total_expense = sum([e['amount'] for e in expenses]) if expenses else 0
-        net = total_income - total_expense
+        # ส่วนลด
+        discounts = conn.execute(
+            "SELECT c.name as customer_name, SUM(b.discount) as total_discount "
+            "FROM bill_summary b LEFT JOIN customers c ON b.customer_id=c.id "
+            "WHERE b.date BETWEEN ? AND ? GROUP BY c.name",
+            (start_date, end_date)
+        ).fetchall()
+
+        # สรุปบิล
+        bills = conn.execute(
+            "SELECT b.id, b.date, c.name AS customer_name, "
+            "b.total_income, b.shop_get, b.discount, b.ref_id "
+            "FROM bill_summary b LEFT JOIN customers c ON b.customer_id=c.id "
+            "WHERE b.date BETWEEN ? AND ? ORDER BY b.id ASC",
+            (start_date, end_date)
+        ).fetchall()
 
         customers = conn.execute("SELECT * FROM customers ORDER BY name ASC").fetchall()
 
-    return render_template('index.html',
-                           incomes=incomes,
-                           expenses=expenses,
-                           total_income=total_income,
-                           total_expense=total_expense,
-                           net=net,   # ✅ ส่งค่า net เข้าไป
-                           current_date=today,
-                           start_date=start_date,
-                           end_date=end_date,
-                           customers=customers)
+    return render_template(
+        'index.html',
+        incomes=incomes,
+        expenses=expenses,
+        discounts=discounts,
+        bills=bills,
+        customers=customers,
+        start_date=start_date,
+        end_date=end_date,
+        selected_customers=selected_customers,
+        show_income=show_income,
+        show_expense=show_expense,
+        show_discount=show_discount,
+        show_summary=show_summary,
+        current_date=start_date   # ✅ ใช้ start_date เป็นค่า default
+    )
 
 
 @app.route("/monthly_report")
@@ -340,6 +471,9 @@ def monthly_report():
                            labels=labels,
                            income_data=income_data,
                            expense_data=expense_data)
+
+
+
 
 
 if __name__ == '__main__':
